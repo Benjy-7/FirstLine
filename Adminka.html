@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FirstLine — Панель управления лидами</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0B0F19; }
+        .heading-font { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+<body class="text-gray-300 antialiased min-h-screen p-4 sm:p-8">
+
+    <div id="auth-overlay" class="fixed inset-0 bg-[#0B0F19] z-50 flex items-center justify-center p-4">
+        <div class="bg-[#141A29] border border-gray-800 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
+            <div class="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center font-bold text-white mx-auto mb-4 text-lg">FL</div>
+            <h3 class="heading-font text-white font-bold text-xl mb-2">Вход в панель FirstLine</h3>
+            <p class="text-xs text-gray-400 mb-6">Введите пароль администратора для доступа к лидам</p>
+            
+            <form onsubmit="handleAuth(event)" class="flex flex-col gap-3">
+                <input type="password" id="admin-password" placeholder="Пароль" required class="w-full px-4 py-3 rounded-xl bg-[#0E1621] border border-gray-700 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 text-sm text-center tracking-widest">
+                <button type="submit" class="w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors text-sm cursor-pointer">
+                    Войти в систему
+                </button>
+            </form>
+            <p id="auth-error" class="text-red-400 text-xs mt-3 hidden">❌ Неверный пароль. Доступ заблокирован.</p>
+        </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto hidden" id="admin-content">
+        
+        <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8 border-b border-gray-800 pb-6">
+            <div>
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="heading-font font-bold text-xl text-white tracking-tight">FirstLine CRM</span>
+                    <span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[10px] font-medium uppercase border border-blue-500/20">Панель лидов</span>
+                </div>
+                <p class="text-xs text-gray-400">Система управления обращениями клиентов в реальном времени</p>
+            </div>
+            <div class="flex items-center gap-3 w-full sm:w-auto">
+                <button onclick="fetchLeads()" class="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-white text-xs font-medium rounded-xl border border-gray-700 transition-colors cursor-pointer">
+                    🔄 Обновить данные
+                </button>
+                <button onclick="logout()" class="px-3 py-2.5 text-xs text-gray-400 hover:text-red-400 transition-colors">
+                    Выйти
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+            <div class="bg-[#141A29] border border-gray-800/80 p-4 rounded-xl">
+                <p class="text-[11px] text-gray-400 uppercase font-medium mb-1">Всего лидов</p>
+                <p id="stat-total" class="heading-font text-2xl font-bold text-white">0</p>
+            </div>
+            <div class="bg-[#141A29] border border-gray-800/80 p-4 rounded-xl">
+                <p class="text-[11px] text-gray-400 uppercase font-medium mb-1">Из чат-бота</p>
+                <p id="stat-bot" class="heading-font text-2xl font-bold text-green-400">0</p>
+            </div>
+            <div class="bg-[#141A29] border border-gray-800/80 p-4 rounded-xl">
+                <p class="text-[11px] text-gray-400 uppercase font-medium mb-1">Из формы</p>
+                <p id="stat-form" class="heading-font text-2xl font-bold text-blue-400">0</p>
+            </div>
+            <div class="bg-[#141A29] border border-gray-800/80 p-4 rounded-xl flex items-center">
+                <select id="filter-source" onchange="renderTable()" class="w-full bg-[#0E1621] border border-gray-700 rounded-lg p-2 text-xs text-gray-300 focus:outline-none focus:border-blue-500">
+                    <option value="all">📊 Все источники</option>
+                    <option value="bot">🤖 Только Чат-бот</option>
+                    <option value="landing">📄 Только Форма</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="bg-[#141A29] border border-gray-800 rounded-2xl overflow-hidden shadow-xl">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr class="bg-[#0E1621] border-b border-gray-800 text-gray-400 uppercase tracking-wider font-semibold">
+                            <th class="p-4 w-12">ID</th>
+                            <th class="p-4">Дата / Время</th>
+                            <th class="p-4">Имя клиента</th>
+                            <th class="p-4">Телефон</th>
+                            <th class="p-4">Источник лида</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leads-table-body" class="divide-y divide-gray-800/60">
+                        </tbody>
+                </table>
+            </div>
+            <div id="no-data-msg" class="p-12 text-center text-gray-500 hidden">
+                📭 Лидов пока нет или они не соответствуют фильтру.
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // === НАСТРОЙКИ БЕЗОПАСНОСТИ ===
+        const ADMIN_PASSWORD_HASH = "AdminLine2026"; // Задайте здесь ЛЮБОЙ свой пароль для входа
+
+        // === НАСТРОЙКИ SUPABASE (Вставьте ваши данные) ===
+        const SUPABASE_URL = "https://zdzerpaldoiojhowwgnr.supabase.co"; 
+        const SUPABASE_ANON_KEY = "sb_publishable_am83NDZ-PdPB9KijBJR_Rg_RzfUi822";
+        
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let allLeads = [];
+
+        // Проверка авторизации при загрузке страницы
+        window.onload = function() {
+            if (sessionStorage.getItem('is_admin_logged') === 'true') {
+                showAdminPanel();
+            }
+        }
+
+        // Логика авторизации
+        function handleAuth(e) {
+            e.preventDefault();
+            const pass = document.getElementById('admin-password').value;
+            const errorMsg = document.getElementById('auth-error');
+
+            if (pass === ADMIN_PASSWORD_HASH) {
+                sessionStorage.setItem('is_admin_logged', 'true');
+                errorMsg.classList.add('hidden');
+                showAdminPanel();
+            } else {
+                errorMsg.classList.remove('hidden');
+                document.getElementById('admin-password').value = "";
+            }
+        }
+
+        function showAdminPanel() {
+            document.getElementById('auth-overlay').classList.add('hidden');
+            document.getElementById('admin-content').classList.remove('hidden');
+            fetchLeads();
+        }
+
+        function logout() {
+            sessionStorage.removeItem('is_admin_logged');
+            window.location.reload();
+        }
+
+        // Запрос данных из Supabase
+        async function fetchLeads() {
+            try {
+                // Запрашиваем данные из таблицы 'Leads', сортируем по ID (новые сверху)
+                const { data, error } = await supabaseClient
+                    .from('Leads')
+                    .select('*')
+                    .order('id', { ascending: false });
+
+                if (error) throw error;
+                allLeads = data || [];
+                
+                calculateStats();
+                renderTable();
+            } catch (err) {
+                alert("Ошибка загрузки данных из Supabase: " + err.message);
+            }
+        }
+
+        // Подсчет статистики
+        function calculateStats() {
+            document.getElementById('stat-total').innerText = allLeads.length;
+            
+            const botCount = allLeads.filter(l => String(l.source).includes('Чат-бот')).length;
+            const formCount = allLeads.filter(l => String(l.source).includes('Форма')).length;
+            
+            document.getElementById('stat-bot').innerText = botCount;
+            document.getElementById('stat-form').innerText = formCount;
+        }
+
+        // Вывод данных в таблицу на экране
+        function renderTable() {
+            const tbody = document.getElementById('leads-table-body');
+            const filterValue = document.getElementById('filter-source').value;
+            const noDataMsg = document.getElementById('no-data-msg');
+            
+            tbody.innerHTML = "";
+
+            // Фильтрация
+            let filtered = allLeads;
+            if (filterValue === 'bot') {
+                filtered = allLeads.filter(l => String(l.source).includes('Чат-бот'));
+            } else if (filterValue === 'landing') {
+                filtered = allLeads.filter(l => String(l.source).includes('Форма'));
+            }
+
+            if (filtered.length === 0) {
+                noDataMsg.classList.remove('hidden');
+                return;
+            } else {
+                noDataMsg.classList.add('hidden');
+            }
+
+            // Отрисовка строк
+            filtered.forEach(lead => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-800/30 transition-colors";
+                
+                // Красивое форматирование даты
+                let formattedDate = lead.created_at;
+                try {
+                    formattedDate = new Date(lead.created_at).toLocaleString('ru-RU');
+                } catch(e){}
+
+                // Стиль для бейджа источника
+                const isBot = String(lead.source).includes('Чат-бот');
+                const badgeClass = isBot 
+                    ? "bg-green-500/10 text-green-400 border-green-500/20" 
+                    : "bg-blue-500/10 text-blue-400 border-blue-500/20";
+
+                tr.innerHTML = `
+                    <td class="p-4 text-gray-500 font-mono">${lead.id}</td>
+                    <td class="p-4 text-gray-400">${formattedDate}</td>
+                    <td class="p-4 font-semibold text-white">${lead.name || 'Не указано'}</td>
+                    <td class="p-4 font-mono text-gray-200">${lead.phone || 'Не указано'}</td>
+                    <td class="p-4">
+                        <span class="px-2 py-1 rounded-md text-[10px] font-medium border ${badgeClass}">
+                            ${lead.source || 'Неизвестно'}
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>
